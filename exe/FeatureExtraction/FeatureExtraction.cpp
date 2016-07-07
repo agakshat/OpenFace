@@ -81,6 +81,9 @@
 #include <FaceAnalyser.h>
 #include <GazeEstimation.h>
 
+#include "ros/ros.h"
+#include "std_msgs/Bool.h"
+
 
 #define INFO_STREAM( stream ) \
 std::cout << stream << std::endl
@@ -169,6 +172,7 @@ void get_output_feature_params(vector<string> &output_similarity_aligned, vector
 
 	string input_root = "";
 	string output_root = "";
+	
 
 	// First check if there is a root argument (so that videos and outputs could be defined more easilly)
 	for (size_t i = 0; i < arguments.size(); ++i)
@@ -520,8 +524,11 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 	bool output_model_params, bool output_pose, bool output_AUs, bool output_gaze,
 	const LandmarkDetector::CLNF& face_model, int frame_count, double time_stamp, bool detection_success,
 	cv::Point3f gazeDirection0, cv::Point3f gazeDirection1, const cv::Vec6d& pose_estimate, double fx, double fy, double cx, double cy,
-	const FaceAnalysis::FaceAnalyser& face_analyser)
+	const FaceAnalysis::FaceAnalyser& face_analyser, ros::Publisher eyegaze)
 {
+
+	std_msgs::Bool msg;
+	msg.data=true;
 
 	double confidence = 0.5 * (1 - face_model.detection_certainty);
 
@@ -532,6 +539,7 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 	{
 		*output_file << ", " << gazeDirection0.x << ", " << gazeDirection0.y << ", " << gazeDirection0.z
 			<< ", " << gazeDirection1.x << ", " << gazeDirection1.y << ", " << gazeDirection1.z;
+		eyegaze.publish(msg);
 	}
 
 	// Output the estimated head pose
@@ -539,6 +547,7 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 	{
 		*output_file << ", " << pose_estimate[0] << ", " << pose_estimate[1] << ", " << pose_estimate[2]
 			<< ", " << pose_estimate[3] << ", " << pose_estimate[4] << ", " << pose_estimate[5];
+		eyegaze.publish(msg);
 	}
 
 	// Output the detected 2D facial landmarks
@@ -646,6 +655,12 @@ int main (int argc, char **argv)
 	// Always track gaze in feature extraction
 	det_parameters.track_gaze = true;
 
+	ros::init(argc, argv, "feature_extraction_node");
+	ROS_INFO("Created the ROS node successfully");
+	cout<<"\nROS node created successfully\n";
+	ros::NodeHandle node;
+	ros::Publisher eyegaze = node.advertise<std_msgs::Bool>("openface_eyegaze",1000);
+	ROS_INFO("Topic should have been created");
 	// Get the input output file parameters
 	
 	// Indicates that rotation should be with respect to camera or world coordinates
@@ -819,6 +834,21 @@ int main (int argc, char **argv)
 				}
 			}
 
+			else
+			{
+				INFO_STREAM("Attempting to read from webcam");
+				video_capture = cv::VideoCapture(0);
+				total_frames = (int)video_capture.get(CV_CAP_PROP_FRAME_COUNT);
+				fps_vid_in = video_capture.get(CV_CAP_PROP_FPS);
+
+				//Check if fps is nan or less than 0
+				if (fps_vid_in != fps_vid_in || fps_vid_in <=0)
+				{
+					INFO_STREAM("FPS of the video file cannot be determined, assuming 30");
+					fps_vid_in = 30;
+				}
+			}
+
 			if (!video_capture.isOpened())
 			{
 				FATAL_STREAM("Failed to open video source, exiting");
@@ -959,7 +989,7 @@ int main (int argc, char **argv)
 			// But only if needed in output
 			if(!output_similarity_align.empty() || hog_output_file.is_open() || output_AUs)
 			{
-				face_analyser.AddNextFrame(captured_image, face_model, time_stamp, false, !det_parameters.quiet_mode);
+				face_analyser.AddNextFrame(captured_image, face_model, time_stamp, true, !det_parameters.quiet_mode);
 				face_analyser.GetLatestAlignedFace(sim_warped_img);
 
 				if(!det_parameters.quiet_mode)
@@ -1025,7 +1055,9 @@ int main (int argc, char **argv)
 			// Output the landmarks, pose, gaze, parameters and AUs
 			outputAllFeatures(&output_file, output_2D_landmarks, output_3D_landmarks, output_model_params, output_pose, output_AUs, output_gaze,
 				face_model, frame_count, time_stamp, detection_success, gazeDirection0, gazeDirection1,
-				pose_estimate, fx, fy, cx, cy, face_analyser);
+				pose_estimate, fx, fy, cx, cy, face_analyser, eyegaze);
+
+			ros::spinOnce();
 
 			// output the tracked video
 			if(!tracked_videos_output.empty())

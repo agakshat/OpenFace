@@ -1,3 +1,19 @@
+cmake_minimum_required(VERSION 2.8.3)
+
+find_package(catkin REQUIRED COMPONENTS
+	roscpp
+	rospy
+	std_msgs
+)
+
+catkin_package(
+	CATKIN_DEPENDS roscpp rospy std_msgs
+)
+
+include_directories(
+	${catkin_INCLUDE_DIRS}
+)
+
 add_executable(FeatureExtraction FeatureExtraction.cpp)
 
 # Local libraries
@@ -10,4 +26,6 @@ target_link_libraries(FeatureExtraction LandmarkDetector)
 target_link_libraries(FeatureExtraction FaceAnalyser)
 target_link_libraries(FeatureExtraction dlib)
 
-target_link_libraries(FeatureExtraction ${OpenCV_LIBS} ${Boost_LIBRARIES} ${TBB_LIBRARIES})
+target_link_libraries(FeatureExtraction ${OpenCV_LIBS} ${Boost_LIBRARIES} ${TBB_LIBRARIES} ${catkin_LIBRARIES})
+
+install (TARGETS FeatureExtraction DESTINATION ${CMAKE_BINARY_DIR}/bin)
