@@ -4,10 +4,12 @@ find_package(catkin REQUIRED COMPONENTS
 	roscpp
 	rospy
 	std_msgs
+	openface_msgs
+	message_generation
 )
 
 catkin_package(
-	CATKIN_DEPENDS roscpp rospy std_msgs
+	CATKIN_DEPENDS message_runtime roscpp rospy std_msgs
 )
 
 include_directories(

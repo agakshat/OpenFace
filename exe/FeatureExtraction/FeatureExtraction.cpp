@@ -82,7 +82,7 @@
 #include <GazeEstimation.h>
 
 #include "ros/ros.h"
-#include "std_msgs/Bool.h"
+#include "openface_msgs/openface.h"
 
 
 #define INFO_STREAM( stream ) \
@@ -172,7 +172,7 @@ void get_output_feature_params(vector<string> &output_similarity_aligned, vector
 
 	string input_root = "";
 	string output_root = "";
-	
+
 
 	// First check if there is a root argument (so that videos and outputs could be defined more easilly)
 	for (size_t i = 0; i < arguments.size(); ++i)
@@ -524,22 +524,33 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 	bool output_model_params, bool output_pose, bool output_AUs, bool output_gaze,
 	const LandmarkDetector::CLNF& face_model, int frame_count, double time_stamp, bool detection_success,
 	cv::Point3f gazeDirection0, cv::Point3f gazeDirection1, const cv::Vec6d& pose_estimate, double fx, double fy, double cx, double cy,
-	const FaceAnalysis::FaceAnalyser& face_analyser, ros::Publisher eyegaze)
+	const FaceAnalysis::FaceAnalyser& face_analyser, ros::Publisher eyegaze, ros::Publisher headpose, ros::Publisher landmark2D, ros::Publisher landmark3D, ros::Publisher facePDM, ros::Publisher facialAU)
 {
 
-	std_msgs::Bool msg;
-	msg.data=true;
-
+	openface_msgs::openface msg_eyegaze, msg_headpose, msg_landmark2D, msg_landmark3D, msg_facePDM, msg_facialAU;
+	cout<<"cleared stage 1\n";
 	double confidence = 0.5 * (1 - face_model.detection_certainty);
 
 	*output_file << frame_count + 1 << ", " << time_stamp << ", " << confidence << ", " << detection_success;
-
+	msg_eyegaze.confidence = msg_headpose.confidence = msg_landmark2D.confidence = msg_landmark3D.confidence = msg_facePDM.confidence = msg_facialAU.confidence = confidence;
+	msg_eyegaze.frame = msg_headpose.frame = msg_landmark2D.frame = msg_landmark3D.frame = msg_facePDM.frame = msg_facialAU.frame = frame_count + 1;
+	msg_eyegaze.success = msg_headpose.success = msg_landmark2D.success = msg_landmark3D.success = msg_facePDM.success = msg_facialAU.success = detection_success;
+	msg_eyegaze.timestamp = msg_headpose.timestamp = msg_landmark2D.timestamp = msg_landmark3D.timestamp = msg_facePDM.timestamp = msg_facialAU.timestamp = time_stamp;
+	cout<<"cleared stage 2\n";
 	// Output the estimated gaze
 	if (output_gaze)
 	{
 		*output_file << ", " << gazeDirection0.x << ", " << gazeDirection0.y << ", " << gazeDirection0.z
 			<< ", " << gazeDirection1.x << ", " << gazeDirection1.y << ", " << gazeDirection1.z;
-		eyegaze.publish(msg);
+		msg_eyegaze.data.push_back(gazeDirection0.x);
+		msg_eyegaze.data.push_back(gazeDirection0.y);
+		msg_eyegaze.data.push_back(gazeDirection0.z);
+		msg_eyegaze.data.push_back(gazeDirection1.x);
+		msg_eyegaze.data.push_back(gazeDirection1.y);
+		msg_eyegaze.data.push_back(gazeDirection1.z);
+		eyegaze.publish(msg_eyegaze);
+		cout<<"cleared stage 3\n";
+		//std::fill(msg.data,6,0);
 	}
 
 	// Output the estimated head pose
@@ -547,7 +558,12 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 	{
 		*output_file << ", " << pose_estimate[0] << ", " << pose_estimate[1] << ", " << pose_estimate[2]
 			<< ", " << pose_estimate[3] << ", " << pose_estimate[4] << ", " << pose_estimate[5];
-		eyegaze.publish(msg);
+		for (int temp=0;temp<6;temp++){
+			msg_headpose.data.push_back(pose_estimate[temp]);
+		}
+		headpose.publish(msg_headpose);
+		cout<<"cleared stage 4\n";
+		//std::fill(msg.data,6,0);
 	}
 
 	// Output the detected 2D facial landmarks
@@ -556,7 +572,11 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 		for (int i = 0; i < face_model.pdm.NumberOfPoints() * 2; ++i)
 		{
 			*output_file << ", " << face_model.detected_landmarks.at<double>(i);
+			msg_landmark2D.data.push_back(face_model.detected_landmarks.at<double>(i));
 		}
+		landmark2D.publish(msg_landmark2D);
+		cout<<"cleared stage 5\n";
+		//std::fill(msg.data,68,0);
 	}
 
 	// Output the detected 3D facial landmarks
@@ -566,7 +586,11 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 		for (int i = 0; i < face_model.pdm.NumberOfPoints() * 3; ++i)
 		{
 			*output_file << ", " << shape_3D.at<double>(i);
+			msg_landmark3D.data.push_back(shape_3D.at<double>(i));
 		}
+		landmark3D.publish(msg_landmark3D);
+		cout<<"cleared stage 6\n";
+		//std::fill(msg.data,68,0);
 	}
 
 	if (output_model_params)
@@ -574,11 +598,16 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 		for (int i = 0; i < 6; ++i)
 		{
 			*output_file << ", " << face_model.params_global[i];
+			msg_facePDM.data.push_back(face_model.params_global[i]);
 		}
 		for (int i = 0; i < face_model.pdm.NumberOfModes(); ++i)
 		{
 			*output_file << ", " << face_model.params_local.at<double>(i, 0);
+			msg_facePDM.data.push_back(face_model.params_local.at<double>(i, 0));
 		}
+		facePDM.publish(msg_facePDM);
+		cout<<"cleared stage 7\n";
+		//std::fill(msg.data,6+face_model.pdm.NumberOfModes(),0);
 	}
 
 
@@ -586,7 +615,6 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 	if (output_AUs)
 	{
 		auto aus_reg = face_analyser.GetCurrentAUsReg();
-
 		vector<string> au_reg_names = face_analyser.GetAURegNames();
 		std::sort(au_reg_names.begin(), au_reg_names.end());
 
@@ -598,6 +626,7 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 				if (au_name.compare(au_reg.first) == 0)
 				{
 					*output_file << ", " << au_reg.second;
+					msg_facialAU.data.push_back(double(au_reg.second));
 					break;
 				}
 			}
@@ -608,6 +637,7 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 			for (size_t p = 0; p < face_analyser.GetAURegNames().size(); ++p)
 			{
 				*output_file << ", 0";
+				msg_facialAU.data.push_back(0);
 			}
 		}
 
@@ -624,6 +654,7 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 				if (au_name.compare(au_class.first) == 0)
 				{
 					*output_file << ", " << au_class.second;
+					msg_facialAU.data.push_back(double(au_class.second));
 					break;
 				}
 			}
@@ -634,8 +665,11 @@ void outputAllFeatures(std::ofstream* output_file, bool output_2D_landmarks, boo
 			for (size_t p = 0; p < face_analyser.GetAUClassNames().size(); ++p)
 			{
 				*output_file << ", 0";
+				msg_facialAU.data.push_back(0);
 			}
 		}
+		facialAU.publish(msg_facialAU);
+		cout<<"cleared stage 8\n";
 	}
 	*output_file << endl;
 }
@@ -659,8 +693,13 @@ int main (int argc, char **argv)
 	ROS_INFO("Created the ROS node successfully");
 	cout<<"\nROS node created successfully\n";
 	ros::NodeHandle node;
-	ros::Publisher eyegaze = node.advertise<std_msgs::Bool>("openface_eyegaze",1000);
-	ROS_INFO("Topic should have been created");
+	ros::Publisher eyegaze = node.advertise<openface_msgs::openface>("openface_eyegaze",1000);
+	ros::Publisher headpose = node.advertise<openface_msgs::openface>("openface_headpose",1000);
+	ros::Publisher landmark2D = node.advertise<openface_msgs::openface>("openface_landmark2D",1000);
+	ros::Publisher landmark3D = node.advertise<openface_msgs::openface>("openface_landmark3D",1000);
+	ros::Publisher facePDM = node.advertise<openface_msgs::openface>("openface_facePDM",1000);
+	ros::Publisher facialAU = node.advertise<openface_msgs::openface>("openface_facialAU",1000);
+	ROS_INFO("openface topics have been created");
 	// Get the input output file parameters
 	
 	// Indicates that rotation should be with respect to camera or world coordinates
@@ -1055,8 +1094,8 @@ int main (int argc, char **argv)
 			// Output the landmarks, pose, gaze, parameters and AUs
 			outputAllFeatures(&output_file, output_2D_landmarks, output_3D_landmarks, output_model_params, output_pose, output_AUs, output_gaze,
 				face_model, frame_count, time_stamp, detection_success, gazeDirection0, gazeDirection1,
-				pose_estimate, fx, fy, cx, cy, face_analyser, eyegaze);
-
+				pose_estimate, fx, fy, cx, cy, face_analyser, eyegaze, headpose, landmark2D, landmark3D, facePDM, facialAU);
+			cout<<"Cleared stage 9\n";
 			ros::spinOnce();
 
 			// output the tracked video
