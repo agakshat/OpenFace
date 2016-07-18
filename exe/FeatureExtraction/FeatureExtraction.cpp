@@ -868,7 +868,7 @@ int main (int argc, char **argv)
 			else
 			{
 				INFO_STREAM("Attempting to read from webcam");
-				video_capture = cv::VideoCapture(0);
+				video_capture = cv::VideoCapture(1);
 				total_frames = (int)video_capture.get(CV_CAP_PROP_FRAME_COUNT);
 				fps_vid_in = video_capture.get(CV_CAP_PROP_FPS);
 
